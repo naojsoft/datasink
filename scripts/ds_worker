@@ -1,0 +1,79 @@
+#!/usr/bin/env python
+"""
+   Usage:
+     $ ds_worker [log options] queuename ...
+"""
+
+import sys
+import os
+from argparse import ArgumentParser
+
+from datasink.worker import JobSink
+from datasink.transfer import JobSink
+
+from g2base import ssdlog
+
+def main(options, args):
+    name = options.name
+    # this processor's name
+    if name is None:
+        name = "worker-{}".format(os.getpid())
+
+    logger = ssdlog.simple_logger(name, level=20)
+
+    queue_names = args
+    realm_host = options.realm_host
+    numworkers = options.numthreads
+
+    jobsink = JobSink(logger, name)
+
+    # TODO: read config?
+    config = dict(username='guest', password='guest', host=realm_host,
+                  queue_names=queue_names, numworkers=numworkers)
+
+    jobsink.serve(config)
+
+
+if __name__ == '__main__':
+
+    argprs = ArgumentParser("datasink worker")
+
+    argprs.add_argument("--debug", dest="debug", default=False,
+                        action="store_true",
+                        help="Enter the pdb debugger on main()")
+    ## argprs.add_argument("-f", "--config", dest="configfile",
+    ##                     help="Specify the configuration file for this realm")
+    argprs.add_argument("--host", dest="realm_host", default='localhost',
+                        metavar="HOST",
+                        help="Use HOST for this realm")
+    argprs.add_argument("-n", "--name", dest="name", default=None,
+                        metavar="NAME",
+                        help="Specify the NAME for this worker")
+    argprs.add_argument("--numthreads", dest="numthreads", type=int,
+                        default=2,
+                        help="Use NUM threads for downloading", metavar="NUM")
+    argprs.add_argument("--profile", dest="profile", action="store_true",
+                        default=False,
+                        help="Run the profiler on main()")
+    ssdlog.addlogopts(argprs)
+
+    (options, args) = argprs.parse_known_args(sys.argv[1:])
+
+    if len(args) == 0:
+        argprs.error("You need to specify queues on command line")
+
+    # Are we debugging this?
+    if options.debug:
+        import pdb
+
+        pdb.run('main(options, args)')
+
+    # Are we profiling this?
+    elif options.profile:
+        import profile
+
+        print("%s profile:" % sys.argv[0])
+        profile.run('main(options, args)')
+
+    else:
+        main(options, args)
