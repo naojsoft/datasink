@@ -127,7 +127,7 @@ class Transfer:
         try:
 
             # Copy file
-            self.transfer_file(filepath, req['host'], newpath,
+            self.transfer_from(filepath, req['host'], newpath,
                                transfermethod=req['transfermethod'],
                                username=req.get('username', None),
                                port=req.get('port', None),
@@ -150,7 +150,7 @@ class Transfer:
             return True
         return False
 
-    def transfer_file(self, filepath, host, newpath,
+    def transfer_from(self, filepath, host, newpath,
                       transfermethod='ftps', username=None,
                       password=None, port=None, result={},
                       info={}, req={}):

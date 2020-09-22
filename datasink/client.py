@@ -32,9 +32,10 @@ class JobSource:
         self.connection = pika.BlockingConnection(params)
         self.channel = self.connection.channel()
 
+        durable = self.config.get('persist', False)
         self.channel.exchange_declare(exchange=self.realm,
                                       exchange_type='direct',
-                                      durable=True)
+                                      durable=durable)
 
     def shutdown(self):
         self.connection.close()

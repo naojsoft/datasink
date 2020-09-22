@@ -15,14 +15,18 @@ def setup_queue(channel, queue_name, dct, config):
 
     # durable=True to make sure queue is persistent
     durable = dct.get('persist', False)
+    args = {'x-priority': priority,
+            'x-overflow': 'drop-head',
+            'x-dead-letter-exchange': 'dlx',
+            #'x-dead-letter-routing-key': queue_name,
+            }
+    if 'queue_length' in dct:
+        args['x-max-length'] = dct['queue_length'],
+    if 'ttl_sec' in dct:
+        args['x-message-ttl'] = int(1000 * dct['ttl_sec']),
+
     channel.queue_declare(queue=queue_name, durable=durable,
-                          arguments={'x-priority': priority,
-                                     'x-max-length': config['max_queue_length'],
-                                     'x-overflow': 'drop-head',
-                                     #'x-message-ttl': 1000 * config['message_ttl_sec'],
-                                     'x-dead-letter-exchange': 'dlx',
-                                     #'x-dead-letter-routing-key': queue_name,
-                                     })
+                          arguments=args)
 
     channel.queue_bind(exchange=config['realm'],
                        queue=queue_name,
@@ -55,6 +59,7 @@ def read_config(keys_file):
 def configure(keys_file):
 
     config = read_config(keys_file)
+    durable = config.get('persist', False)
 
     connection = pika.BlockingConnection(pika.ConnectionParameters(
             host=config['host']))
@@ -62,16 +67,16 @@ def configure(keys_file):
 
     # this is our main exchange for publishing datasink requests on this realm
     channel.exchange_declare(exchange=config['realm'], exchange_type='direct',
-                             durable=True)
+                             durable=durable)
 
     # declare our "dead letter exchange" (DLX). Unacknowledged messages,
     # message timeouts, etc. end up getting routed here.
     # NOTE: exchange type should be "fanout" for the DLX
     channel.exchange_declare(exchange='dlx', exchange_type='fanout',
-                             durable=True)
+                             durable=durable)
 
     # declare the queue that will be bound to the DLX
-    channel.queue_declare(queue=config['backlog_queue'], durable=True)
+    channel.queue_declare(queue=config['backlog_queue'], durable=durable)
     channel.queue_bind(exchange='dlx',
                        #routing_key='task_queue', # x-dead-letter-routing-key
                        queue=config['backlog_queue'])
