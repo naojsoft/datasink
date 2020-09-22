@@ -12,7 +12,7 @@ import json
 
 import pika
 
-from datasink.initialize import read_config
+from datasink.initialize import read_config, default_topic
 
 
 class JobSource:
@@ -25,10 +25,18 @@ class JobSource:
         self.config = read_config(configfile)
 
         self.realm = self.config['realm']
-        self.realm_host = self.config['host']
+        self.realm_host = self.config['realm_host']
 
     def connect(self):
-        params = pika.ConnectionParameters(self.realm_host)
+        auth = pika.PlainCredentials(username=self.config['realm_username'],
+                                     password=self.config['realm_password'])
+        params = pika.ConnectionParameters(host=self.realm_host,
+                                           #port=config['realm_port'],
+                                           # NOTE: necessary to keep RMQ
+                                           # from disconnecting us if we
+                                           # don't send anything for a while
+                                           heartbeat=0,
+                                           credentials=auth)
         self.connection = pika.BlockingConnection(params)
         self.channel = self.connection.channel()
 
@@ -40,35 +48,39 @@ class JobSource:
     def shutdown(self):
         self.connection.close()
 
-    def submit_job(self, name, job):
+    def submit(self, job):
 
-        dct = self.config['keys'][name]
-        key = dct['key']
-        queue_name = key.split('-')[0]
+        try:
+            pkt = dict()
+            pkt.update(job)
+            pkt.update(time_origin=time.time(),
+                       source_origin=self.name)
 
-        job.update(queue=queue_name, time_origin=time.time(),
-                   source_origin=self.name)
+            message = json.dumps(pkt)
+            topic = job.get('topic', default_topic)
 
-        message = json.dumps(job)
+            # set up message properties
+            kwargs = {}
 
-        # set up message properties
-        kwargs = {}
+            persist = self.config.get('persist', False)
+            if persist:
+                kwargs['delivery_mode'] = 2
 
-        persist = dct.get('persist', False)
-        if persist:
-            kwargs['delivery_mode'] = 2
+            msg_ttl_sec = self.config.get('ttl_sec', None)
+            if msg_ttl_sec is not None:
+                # message TTL is in msec
+                message_ttl = int(self.message_ttl_sec * 1000)
+                kwargs['expiration'] = str(message_ttl)
 
-        msg_ttl_sec = dct.get('msg_ttl_sec', None)
-        if msg_ttl_sec is not None:
-            # message TTL is in msec
-            message_ttl = int(self.message_ttl_sec * 1000)
-            kwargs['expiration'] = str(message_ttl)
+            props = pika.BasicProperties(**kwargs)
 
-        props = pika.BasicProperties(**kwargs)
+            self.channel.basic_publish(exchange=self.realm,
+                                       routing_key=topic,
+                                       body=message,
+                                       properties=props)
 
-        self.channel.basic_publish(exchange=self.realm,
-                                   routing_key=key,
-                                   body=message,
-                                   properties=props)
+            self.logger.info("sent job: %r" % pkt)
 
-        self.logger.info("sent message %r" % message)
+        except Exception as e:
+            self.logger.error("Error submitting job to '{}': {}".format(self.realm, e),
+                              exc_info=True)

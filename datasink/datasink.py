@@ -10,6 +10,7 @@ $ datasink -f <configfile>
 
 """
 import sys
+import threading
 import os, signal
 
 from g2base import ssdlog, myproc
@@ -46,6 +47,11 @@ def server(options, config):
         job = work_unit['job']
         info, res = {}, {}
 
+        # TODO: where should these be inserted
+        job['host'] = config['transfer_host']
+        job['transfermethod'] = config['transfer_method']
+        job['username'] = config['transfer_username']
+
         xfer.transfer(job, info, res)
 
         # ACK allows another job to be released to us
@@ -56,9 +62,14 @@ def server(options, config):
             logger.error("No result code after transfer: %s" % (str(res)))
             return
 
+    ev_quit = threading.Event()
+
     jobsink = worker.JobSink(logger, name)
+    jobsink.config = config
     jobsink.add_action('transfer', xfer_file)
-    jobsink.serve(config)
+
+    jobsink.start_workers(ev_quit)
+    jobsink.serve(ev_quit)
 
     logger.info("Exiting program.")
     sys.exit(0)

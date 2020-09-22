@@ -10,71 +10,11 @@ where <configfile> is the path to a file containing the configuration
 for this datasink.
 """
 import sys
-import os
 from argparse import ArgumentParser
-
-from datasink.worker import JobSink
-from datasink.transfer import Transfer, TransferRequest
-from datasink.initialize import read_config
 
 from g2base import ssdlog
 
-
-class DSTransfer(Transfer):
-
-    def do_job(self, work_unit, fn_ack):
-        """File transfer job."""
-        job = work_unit['job']
-
-        # this object should be able to be written out and read back in
-        # later if it fails for some reason
-        req = TransferRequest(job['srcpath'], None,
-                              job['username'], job['host'],
-                              job['transfermethod'],
-                              size=job.get('size', None),
-                              md5sum=job.get('md5sum', None),
-                              priority=job.get('priority', None))
-
-        # do the transfer (it will be a pull)
-        info = dict()
-        result = dict()
-
-        # this waits until subprocess completes
-        print("would transfer", req.as_dict())
-        #self.transfer(req, info, result)
-
-        # result should have a 'xfer_code' key in it
-        if 'xfer_code' not in result:
-            self.logger.error("Fatal error: no 'xfer_code' in result: {}".format(str(result)))
-
-        else:
-            xfer_code = result[xfer_code]
-
-        fn_ack(True, '', {})
-
-
-def main(options, args):
-
-    config = read_config(options.configfile)
-
-    realm = config['realm']
-    realm_host = config['host']
-    key = config['key']
-    name = key.split('-')[0]
-    numworkers = config.get('numworkers', 2)
-    datadir = config['datadir']
-
-    logger = ssdlog.simple_logger(name, level=20)
-
-    transfer = DSTransfer(logger, datadir)
-
-    jobsink = JobSink(logger, name)
-    # when we receive a job of action='transfer' do this
-    jobsink.add_action('transfer', transfer.do_job)
-
-    config.update(dict(queue_names=[name]))
-
-    jobsink.serve(config)
+from datasink.datasink import main
 
 
 if __name__ == '__main__':
@@ -84,16 +24,19 @@ if __name__ == '__main__':
     argprs.add_argument("--debug", dest="debug", default=False,
                         action="store_true",
                         help="Enter the pdb debugger on main()")
-    argprs.add_argument("-f", "--config", dest="configfile",
+    argprs.add_argument("-f", "--config", dest="conffile",
                         help="Specify the configuration file for this sink")
     argprs.add_argument("--profile", dest="profile", action="store_true",
                         default=False,
                         help="Run the profiler on main()")
+    argprs.add_argument("--kill", dest="kill", action="store_true",
+                        default=False,
+                        help="Kill the running datasink")
     ssdlog.addlogopts(argprs)
 
     (options, args) = argprs.parse_known_args(sys.argv[1:])
 
-    if options.configfile is None:
+    if options.conffile is None:
         argprs.error("You need to specify a config file with -f")
 
     # Are we debugging this?

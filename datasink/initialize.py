@@ -9,12 +9,16 @@ import sys
 import yaml
 import pika
 
+default_topic = 'general'
+
 
 def setup_queue(channel, queue_name, dct, config):
     priority = dct.get('priority', config['default_priority'])
 
     # durable=True to make sure queue is persistent
     durable = dct.get('persist', False)
+    exclusive = dct.get('transient', False)
+
     args = {'x-priority': priority,
             'x-overflow': 'drop-head',
             'x-dead-letter-exchange': 'dlx',
@@ -25,12 +29,15 @@ def setup_queue(channel, queue_name, dct, config):
     if 'ttl_sec' in dct:
         args['x-message-ttl'] = int(1000 * dct['ttl_sec']),
 
+    # NOTE: if exclusive==True, the queue is deleted when the
+    #       client exits
     channel.queue_declare(queue=queue_name, durable=durable,
-                          arguments=args)
+                          exclusive=exclusive, arguments=args)
 
     channel.queue_bind(exchange=config['realm'],
                        queue=queue_name,
-                       routing_key=dct['key'])
+                       # NOTE: acts as a selector for messages to this queue
+                       routing_key=dct.get('topic', default_topic))
 
 def callback(ch, method, properties, body):
     print(" [x] %r" % (properties,))
@@ -61,8 +68,12 @@ def configure(keys_file):
     config = read_config(keys_file)
     durable = config.get('persist', False)
 
-    connection = pika.BlockingConnection(pika.ConnectionParameters(
-            host=config['host']))
+    auth = pika.PlainCredentials(username=config['realm_username'],
+                                 password=config['realm_password'])
+    params = pika.ConnectionParameters(host=config['realm_host'],
+                                       #port=config['realm_port'],
+                                       credentials=auth)
+    connection = pika.BlockingConnection(params)
     channel = connection.channel()
 
     # this is our main exchange for publishing datasink requests on this realm
@@ -83,7 +94,8 @@ def configure(keys_file):
 
     # SET UP DATASINK QUEUES
     for name, dct in config['keys'].items():
-        setup_queue(channel, name, dct, config)
+        if dct.get('enabled', False):
+            setup_queue(channel, name, dct, config)
 
     return connection, channel, config
 

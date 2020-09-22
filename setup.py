@@ -27,8 +27,9 @@ setup(
     url = "http://naojsoft.github.com/datasink",
     packages = ['datasink'],
     package_data = { },
-    scripts = ['scripts/ds_client', 'scripts/ds_worker', 'scripts/ds_sleep',
-               'scripts/ds_file', 'scripts/datasink'],
+    scripts = ['scripts/datasink', # 'scripts/ds_client', 'scripts/ds_worker',
+               #'scripts/ds_sleep', 'scripts/ds_file',
+               ],
     install_requires = ['pika>=1.1.0', 'pyyaml>=5.3.1'],
     classifiers=[
           'Intended Audience :: Science/Research',

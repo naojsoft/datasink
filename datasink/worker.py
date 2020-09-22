@@ -16,7 +16,7 @@ from g2base import ssdlog
 
 import pika
 
-from datasink.initialize import read_config
+from datasink.initialize import read_config, default_topic
 
 
 class JobSink:
@@ -26,6 +26,7 @@ class JobSink:
         self.name = name
         self.work_queue = queue.Queue()
         self.config = dict()
+        self.threads = []
 
         self.action_tbl = {'ping': self.ping,
                            'window': self.window,
@@ -67,7 +68,7 @@ class JobSink:
         job = work_unit['job']
         self.logger.info('worker {} handling job {}'.format(i, str(job)))
 
-        action = job['action']
+        action = job.get('action', None)
         method = self.action_tbl.get(action, self.no_such_action)
 
         # define acknowledgement function
@@ -123,38 +124,44 @@ class JobSink:
     def no_such_action(self, work_unit, fn_ack):
         """This job runs if the job type is not recognized."""
         job = work_unit['job']
-        msg = "No such job '{}' at worker '{}'".format(
-            job['action'], self.name)
+        action = job.get('action', None)
+        msg = "No such job '{}' at worker '{}'".format(action, self.name)
         self.logger.error(msg)
         fn_ack(False, msg, {})
 
     def read_config(self, configfile):
         self.config = read_config(configfile)
 
-    def serve(self, config):
+    def start_workers(self, ev_quit=None):
+        numworkers = self.config['num_workers']
+        for i in range(numworkers):
+            t = threading.Thread(target=self.worker_loop, args=[i, ev_quit])
+            self.threads.append(t)
+            t.start()
+
+    def serve(self, ev_quit=None):
+        config = self.config
         # connect to queues
-        auth = pika.PlainCredentials(username=config['username'],
-                                     password=config['password'])
-        connection = pika.BlockingConnection(
-            #pika.ConnectionParameters(host=realm_host, port=port, credentials=auth))
-            pika.ConnectionParameters(host=config['host']))
+        auth = pika.PlainCredentials(username=config['realm_username'],
+                                     password=config['realm_password'])
+        params = pika.ConnectionParameters(host=config['realm_host'],
+                                           #port=config['realm_port'],
+                                           credentials=auth)
+        connection = pika.BlockingConnection(params)
         channel = connection.channel()
 
         # start up consumer workers
-        ev_quit = threading.Event()
-        threads = []
-
-        numworkers = config['numworkers']
-        for i in range(numworkers):
-            t = threading.Thread(target=self.worker_loop, args=[i, ev_quit])
-            threads.append(t)
-            t.start()
+        if ev_quit is None:
+            ev_quit = threading.Event()
 
         self.logger.info("Waiting for messages. To exit press CTRL+C")
-        channel.basic_qos(prefetch_count=numworkers)
+        channel.basic_qos(prefetch_count=config['num_workers'])
 
         queue_names = config['queue_names']
         for queue_name in queue_names:
+            channel.queue_bind(exchange=config['realm'], queue=queue_name,
+                               routing_key=config.get('topic', default_topic))
+
             callback_fn = functools.partial(self.handle_message,
                                             args=[channel, connection,
                                                   queue_name])
@@ -172,7 +179,7 @@ class JobSink:
         channel.stop_consuming()
 
         ev_quit.set()
-        for t in threads:
+        for t in self.threads:
             t.join()
 
         connection.close()
