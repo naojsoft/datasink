@@ -32,6 +32,7 @@ class JobSink:
                            'window': self.window,
                            'sleep': self.sleep,
                            }
+        self.retry_interval = 60.0
 
     def add_action(self, aname, method):
         self.action_tbl[aname] = method
@@ -132,6 +133,8 @@ class JobSink:
     def read_config(self, configfile):
         self.config = read_config(configfile)
 
+        self.retry_interval = self.config.get('retry_interval', 60.0)
+
     def start_workers(self, ev_quit=None):
         numworkers = self.config['num_workers']
         for i in range(numworkers):
@@ -147,37 +150,58 @@ class JobSink:
         params = pika.ConnectionParameters(host=config['realm_host'],
                                            #port=config['realm_port'],
                                            credentials=auth)
-        connection = pika.BlockingConnection(params)
-        channel = connection.channel()
 
         # start up consumer workers
         if ev_quit is None:
             ev_quit = threading.Event()
 
-        self.logger.info("Waiting for messages. To exit press CTRL+C")
-        channel.basic_qos(prefetch_count=config['num_workers'])
+        while not ev_quit.is_set():
+            try:
+                connection = pika.BlockingConnection(params)
+                channel = connection.channel()
 
-        queue_names = config.get('queue_names', [self.name])
-        for queue_name in queue_names:
-            channel.queue_bind(exchange=config['realm'], queue=queue_name,
-                               routing_key=config.get('topic', default_topic))
+                channel.basic_qos(prefetch_count=config['num_workers'])
 
-            callback_fn = functools.partial(self.handle_message,
-                                            args=[channel, connection,
-                                                  queue_name])
-            channel.basic_consume(queue=queue_name,
-                                  on_message_callback=callback_fn)
+                queue_names = config.get('queue_names', [self.name])
+                for queue_name in queue_names:
+                    channel.queue_bind(exchange=config['realm'], queue=queue_name,
+                                       routing_key=config.get('topic', default_topic))
 
-        self.logger.info("consuming on queues: %s" % (', '.join(queue_names)))
-        try:
-            channel.start_consuming()
+                callback_fn = functools.partial(self.handle_message,
+                                                args=[channel, connection,
+                                                      queue_name])
+                channel.basic_consume(queue=queue_name,
+                                      on_message_callback=callback_fn)
 
-        except KeyboardInterrupt:
-            self.logger.info("detected keyboard interrupt!")
+                self.logger.info("consuming on queues: %s" % (', '.join(queue_names)))
+                self.logger.info("Waiting for messages. To exit press CTRL+C")
+                try:
+                    channel.start_consuming()
+
+                except KeyboardInterrupt:
+                    self.logger.info("detected keyboard interrupt!")
+                    channel.stop_consuming()
+                    break
+
+            except pika.exceptions.ConnectionClosedByBroker as e:
+                self.logger.error("broker closed connection: {}".format(e))
+                self.logger.info("retrying after {} sec interval".format(self.retry_interval))
+                time.sleep(self.retry_interval)
+                continue
+
+            except pika.exceptions.AMQPChannelError as e:
+                self.logger.error("channel error: {}".format(e), exc_info=True)
+                self.logger.info("retrying after {} sec interval".format(self.retry_interval))
+                time.sleep(self.retry_interval)
+                continue
+
+            except pika.exceptions.AMQPConnectionError as e:
+                self.logger.error("connection error: {}".format(e), exc_info=True)
+                self.logger.info("retrying after {} sec interval".format(self.retry_interval))
+                time.sleep(self.retry_interval)
+                continue
 
         self.logger.info("Shutting down...")
-        channel.stop_consuming()
-
         ev_quit.set()
         for t in self.threads:
             t.join()
