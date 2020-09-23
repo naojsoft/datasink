@@ -35,6 +35,13 @@ def server(options, config):
     else:
         logger.info("Storing files in {}".format(datadir))
 
+    # if this is set, file will be moved here after transfer
+    movedir = config.get('movedir', None)
+
+    # if this is set, only instruments matching this instrument
+    # will be transferred
+    insfilter = config.get('insfilter', None)
+
     # this datasink's name
     name = key.split('-')[0]
     queue_names = [name]
@@ -48,6 +55,12 @@ def server(options, config):
     def xfer_file(work_unit, fn_ack):
         job = work_unit['job']
         info, res = {}, {}
+
+        if insfilter is not None:
+            if job['insname'] not in insfilter:
+                # ACK allows another job to be released to us
+                fn_ack(True, '', {})
+                return
 
         # TODO: where should these be inserted
         job['host'] = config['transfer_host']
@@ -63,6 +76,14 @@ def server(options, config):
         if 'xfer_code' not in res:
             logger.error("No result code after transfer: %s" % (str(res)))
             return
+
+        if res['xfer_code'] == 0 and movedir is not None:
+            dirname, filename = os.path.split(job['srcpath'])
+            move_path = os.path.join(movedir, filename)
+            try:
+                os.rename(res['dst_path'], move_path)
+            except Exception as e:
+                logger.error("Error moving file after transfer: {}".format(e))
 
     ev_quit = threading.Event()
 
