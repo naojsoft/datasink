@@ -157,7 +157,7 @@ class JobSink:
         self.logger.info("Waiting for messages. To exit press CTRL+C")
         channel.basic_qos(prefetch_count=config['num_workers'])
 
-        queue_names = config['queue_names']
+        queue_names = config.get('queue_names', [self.name])
         for queue_name in queue_names:
             channel.queue_bind(exchange=config['realm'], queue=queue_name,
                                routing_key=config.get('topic', default_topic))
@@ -168,7 +168,7 @@ class JobSink:
             channel.basic_consume(queue=queue_name,
                                   on_message_callback=callback_fn)
 
-        self.logger.info("consuming on queues %s" % (', '.join(queue_names)))
+        self.logger.info("consuming on queues: %s" % (', '.join(queue_names)))
         try:
             channel.start_consuming()
 

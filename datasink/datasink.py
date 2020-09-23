@@ -41,7 +41,9 @@ def server(options, config):
     config['queue_names'] = queue_names
 
     # takes care of transfers into datadir
-    xfer = transfer.Transfer(logger, datadir)
+    xfer = transfer.Transfer(logger, datadir,
+                             storeby=config.get('storeby', None),
+                             md5check=config.get('md5check', False))
 
     def xfer_file(work_unit, fn_ack):
         job = work_unit['job']
