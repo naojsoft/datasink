@@ -256,7 +256,13 @@ class Transfer:
             result.update(dict(xfer_cmd=cmd))
 
             self.logger.info(cmd)
+            start_time = time.time()
+
             res = os.system(cmd)
+
+            end_time = time.time()
+            self.logger.info("transfer completed, elapsed=%.4f sec" % (
+                end_time - start_time))
 
             # Check size
             statbuf = os.stat(newpath)
