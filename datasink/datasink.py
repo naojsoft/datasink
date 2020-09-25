@@ -101,6 +101,9 @@ def server(options, config):
                     if movedir is not None:
                         move_path = os.path.join(movedir, filename)
                         os.rename(res['dst_path'], move_path)
+
+                logger.info("unpack/move completed")
+
             except Exception as e:
                 logger.error("Error unpacking/moving file after transfer: {}".format(e),
                              exc_info=True)
