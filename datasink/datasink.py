@@ -12,6 +12,7 @@ $ datasink -f <configfile>
 import sys
 import threading
 import os, signal
+import tarfile
 
 from g2base import ssdlog, myproc
 
@@ -37,6 +38,7 @@ def server(options, config):
 
     # if this is set, file will be moved here after transfer
     movedir = config.get('movedir', None)
+    unpack_tarfiles = config.get('unpack_tarfiles', False)
 
     # if this is set, only instruments matching this instrument
     # will be transferred
@@ -77,13 +79,31 @@ def server(options, config):
             logger.error("No result code after transfer: %s" % (str(res)))
             return
 
-        if res['xfer_code'] == 0 and movedir is not None:
-            dirname, filename = os.path.split(job['srcpath'])
-            move_path = os.path.join(movedir, filename)
+        if res['xfer_code'] == 0:
+            dst_path = res['dst_path']
+            dst_dir, filename = os.path.split(dst_path)
+            file_pfx, file_ext = os.path.splitext(filename)
+            file_ext = file_ext.lower()
+
             try:
-                os.rename(res['dst_path'], move_path)
+                if (unpack_tarfiles and
+                    file_ext in ['.tar', '.tgz', '.tar.gz']):
+                    if movedir is not None:
+                        extract_dir = movedir
+                    else:
+                        extract_dir = dst_dir
+                    # unpack tar file
+                    with tarfile.open(dst_path, 'r') as tar_f:
+                        tar_f.extractall(path=extract_dir)
+                    # & remove tarball
+                    os.remove(dst_path)
+                else:
+                    if movedir is not None:
+                        move_path = os.path.join(movedir, filename)
+                        os.rename(res['dst_path'], move_path)
             except Exception as e:
-                logger.error("Error moving file after transfer: {}".format(e))
+                logger.error("Error unpacking/moving file after transfer: {}".format(e),
+                             exc_info=True)
 
     ev_quit = threading.Event()
 
