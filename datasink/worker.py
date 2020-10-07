@@ -164,7 +164,8 @@ class JobSink:
 
                 queue_names = config.get('queue_names', [self.name])
                 for queue_name in queue_names:
-                    channel.queue_bind(exchange=config['realm'], queue=queue_name,
+                    channel.queue_bind(queue=queue_name,
+                                       exchange=config['realm'],
                                        routing_key=config.get('topic', default_topic))
 
                 callback_fn = functools.partial(self.handle_message,

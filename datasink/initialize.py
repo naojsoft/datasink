@@ -13,11 +13,14 @@ default_topic = 'general'
 
 
 def setup_queue(channel, queue_name, dct, config):
+    """Create queue if necessary and associates it with the exchange,
+    so that it will receive messages sent to the exchange.
+    """
     priority = dct.get('priority', config['default_priority'])
 
     # durable=True to make sure queue is persistent
     durable = dct.get('persist', False)
-    exclusive = dct.get('transient', False)
+    auto_delete = dct.get('transient', True)
 
     args = {'x-priority': priority,
             'x-overflow': 'drop-head',
@@ -29,24 +32,41 @@ def setup_queue(channel, queue_name, dct, config):
     if 'ttl_sec' in dct:
         args['x-message-ttl'] = int(1000 * dct['ttl_sec']),
 
-    # NOTE: if exclusive==True, the queue is deleted when the
+    # NOTE: if auto_delete==True, the queue is deleted when the
     #       client exits
     channel.queue_declare(queue=queue_name, durable=durable,
-                          exclusive=exclusive, arguments=args)
+                          auto_delete=auto_delete, arguments=args)
 
-    channel.queue_bind(exchange=config['realm'],
-                       queue=queue_name,
+    channel.queue_bind(queue=queue_name,
+                       exchange=config['realm'],
                        # NOTE: acts as a selector for messages to this queue
                        routing_key=dct.get('topic', default_topic))
 
-def callback(ch, method, properties, body):
+def unlink_queue(channel, queue_name, dct, config):
+    """Disassociates this queue from the exchange, so that it won't receive
+       messages sent to the exchange.
+    """
+    channel.queue_unbind(queue=queue_name,
+                         exchange=config['realm'],
+                         routing_key=dct.get('topic', default_topic))
+
+def purge_queue(channel, queue_name):
+    """Purge all messages from the named queue.
+    """
+    channel.queue_purge(queue=queue_name)
+
+def remove_queue(channel, queue_name):
+    """Purge all messages from the named queue and delete it.
+    """
+    channel.queue_purge(queue=queue_name)
+    channel.queue_delete(queue=queue_name)
+
+def example_dlx_cb(ch, method, properties, body):
     print(" [x] %r" % (properties,))
     print(" [reason] : %s : %r" % (properties.headers['x-death'][0]['reason'], body))
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
-def handle_dlx(channel, config):
-    print(" [*] Waiting for dead letters. To exit press Ctrl+C")
-
+def handle_dlx(channel, config, callback):
     channel.basic_consume(queue=config['backlog_queue'],
                           on_message_callback=callback)
     channel.start_consuming()
@@ -63,15 +83,17 @@ def read_config(keys_file):
 
     return config
 
-def configure(keys_file):
-
-    config = read_config(keys_file)
+def configure_exchange(config):
     durable = config.get('persist', False)
 
     auth = pika.PlainCredentials(username=config['realm_username'],
                                  password=config['realm_password'])
     params = pika.ConnectionParameters(host=config['realm_host'],
                                        #port=config['realm_port'],
+                                       # NOTE: necessary to keep RMQ
+                                       # from disconnecting us if we
+                                       # don't send anything for a while
+                                       heartbeat=0,
                                        credentials=auth)
     connection = pika.BlockingConnection(params)
     channel = connection.channel()
@@ -92,12 +114,7 @@ def configure(keys_file):
                        #routing_key='task_queue', # x-dead-letter-routing-key
                        queue=config['backlog_queue'])
 
-    # SET UP DATASINK QUEUES
-    for name, dct in config['keys'].items():
-        if dct.get('enabled', False):
-            setup_queue(channel, name, dct, config)
-
-    return connection, channel, config
+    return connection, channel
 
 
 def main(options, args):
@@ -106,9 +123,16 @@ def main(options, args):
     if configfile is None:
         raise ValueError("Please specify a config file with -f")
 
-    connection, channel, config = configure(configfile)
+    config = read_config(keys_file)
+    connection, channel = configure_exchange(config)
 
-    handle_dlx(channel, config)
+    # set up datasink queues
+    for name, dct in config['keys'].items():
+        if dct.get('enabled', False):
+            setup_queue(channel, name, dct, config)
+
+    print("[*] Waiting for dead letters. To exit press Ctrl+C")
+    handle_dlx(channel, config, example_dlx_cb)
 
 
 if __name__ == "__main__":
