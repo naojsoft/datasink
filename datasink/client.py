@@ -84,3 +84,4 @@ class JobSource:
         except Exception as e:
             self.logger.error("Error submitting job to '{}': {}".format(self.realm, e),
                               exc_info=True)
+            raise e

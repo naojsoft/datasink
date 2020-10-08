@@ -187,19 +187,19 @@ class JobSink:
             except pika.exceptions.ConnectionClosedByBroker as e:
                 self.logger.error("broker closed connection: {}".format(e))
                 self.logger.info("retrying after {} sec interval".format(self.retry_interval))
-                time.sleep(self.retry_interval)
+                ev_quit.wait(self.retry_interval)
                 continue
 
             except pika.exceptions.AMQPChannelError as e:
                 self.logger.error("channel error: {}".format(e), exc_info=True)
                 self.logger.info("retrying after {} sec interval".format(self.retry_interval))
-                time.sleep(self.retry_interval)
+                ev_quit.wait(self.retry_interval)
                 continue
 
             except pika.exceptions.AMQPConnectionError as e:
                 self.logger.error("connection error: {}".format(e), exc_info=True)
                 self.logger.info("retrying after {} sec interval".format(self.retry_interval))
-                time.sleep(self.retry_interval)
+                ev_quit.wait(self.retry_interval)
                 continue
 
         self.logger.info("Shutting down...")
