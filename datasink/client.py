@@ -40,11 +40,6 @@ class JobSource:
         self.connection = pika.BlockingConnection(params)
         self.channel = self.connection.channel()
 
-        durable = self.config.get('persist', False)
-        self.channel.exchange_declare(exchange=self.realm,
-                                      exchange_type='direct',
-                                      durable=durable)
-
     def shutdown(self):
         self.connection.close()
 
@@ -62,7 +57,7 @@ class JobSource:
             # set up message properties
             kwargs = {}
 
-            persist = self.config.get('persist', False)
+            persist = self.config.get('message_persist', False)
             if persist:
                 kwargs['delivery_mode'] = 2
 
