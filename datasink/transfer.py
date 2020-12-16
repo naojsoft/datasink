@@ -425,7 +425,7 @@ class Transfer:
                 end_time - start_time))
 
             # TODO: Check size, md5sum on remote?
-            info['filesize'] = ?
+            info['filesize'] = None
             info['md5sum'] = None
 
             result.update(dict(time_done=datetime.datetime.now(),
