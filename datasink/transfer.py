@@ -425,8 +425,9 @@ class Transfer:
                 end_time - start_time))
 
             # TODO: Check size, md5sum on remote?
-            info['filesize'] = None
-            info['md5sum'] = None
+            size, md5sum = None, None
+            info['filesize'] = size
+            info['md5sum'] = md5sum
 
             result.update(dict(time_done=datetime.datetime.now(),
                                md5sum=md5sum, xfer_code=res))
