@@ -68,6 +68,7 @@ def server(options, config):
         job['host'] = config['transfer_host']
         job['transfermethod'] = config['transfer_method']
         job['username'] = config['transfer_username']
+        job['direction'] = config.get('transfer_direction', 'from')
 
         xfer.transfer(job, info, res)
 

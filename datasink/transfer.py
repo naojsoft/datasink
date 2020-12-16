@@ -88,22 +88,26 @@ class Transfer:
 
         return md5sum
 
-    def get_newpath(self, filename, req):
+    def get_newpath(self, filename, req, direction='from'):
+
+        abspath = lambda x: x
+        if direction == 'from':
+            abspath = os.path.abspath
 
         if self.storeby is None:
-            newpath = os.path.abspath(os.path.join(self.datadir, filename))
+            newpath = abspath(os.path.join(self.datadir, filename))
+
         elif self.storeby == 'propid':
             propid = req.get('propid', None)
             if propid is None:
                 raise TransferError("Storing by PROP-ID and propid is 'None': {}".format(req))
-            newpath = os.path.abspath(os.path.join(self.datadir, propid,
-                                                   filename))
+            newpath = abspath(os.path.join(self.datadir, propid, filename))
+
         elif self.storeby == 'insname':
             insname = req.get('insname', None)
             if insname is None:
                 raise TransferError("Storing by instrument and insname is 'None': {}".format(req))
-            newpath = os.path.abspath(os.path.join(self.datadir, insname,
-                                                   filename))
+            newpath = abspath(os.path.join(self.datadir, insname, filename))
         else:
             raise TransferError("I don't know how to store by '%s'" % (
                 self.storeby))
@@ -113,10 +117,11 @@ class Transfer:
     def transfer(self, req, info, xfer_dict):
 
         filepath = req['srcpath']
+        direction = req.get('direction', 'from')
 
         (dirpath, filename) = os.path.split(filepath)
         self.logger.debug("Preparing to transfer %s..." % (filename))
-        newpath = self.get_newpath(filename, req)
+        newpath = self.get_newpath(filename, req, direction=direction)
 
         # check for file exists already; if so, rename it and allow the
         # transfer to continue
@@ -125,13 +130,19 @@ class Transfer:
         info.update(dict(md5sum=None, filesize=None))
 
         try:
-
-            # Copy file
-            self.transfer_from(filepath, req['host'], newpath,
-                               transfermethod=req['transfermethod'],
-                               username=req.get('username', None),
-                               port=req.get('port', None),
-                               result=xfer_dict, info=info, req=req)
+            if direction == 'from':
+                # Copy file
+                self.transfer_from(filepath, req['host'], newpath,
+                                   transfermethod=req['transfermethod'],
+                                   username=req.get('username', None),
+                                   port=req.get('port', None),
+                                   result=xfer_dict, info=info, req=req)
+            else:
+                self.transfer_to(filepath, req['host'], newpath,
+                                   transfermethod=req['transfermethod'],
+                                   username=req.get('username', None),
+                                   port=req.get('port', None),
+                                   result=xfer_dict, info=info, req=req)
 
         except Exception as e:
             errmsg = "Failed to transfer file '%s': %s" % (filename, str(e))
@@ -280,6 +291,142 @@ class Transfer:
             else:
                 md5sum = None
             info['md5sum'] = md5sum
+
+            result.update(dict(time_done=datetime.datetime.now(),
+                               md5sum=md5sum, xfer_code=res))
+
+        except (OSError, md5Error) as e:
+            self.logger.error("Command was: %s" % (cmd))
+            errmsg = "Failed to transfer file '%s': %s" % (
+                filename, str(e))
+            result.update(dict(time_done=datetime.datetime.now(),
+                               res_str=errmsg, xfer_code=-1))
+            raise TransferError(errmsg)
+
+        if res != 0:
+            self.logger.error("Command was: %s" % (cmd))
+            errmsg = "Failed to transfer file '%s': exit err=%d" % (
+                filename, res)
+            result.update(dict(res_str=errmsg))
+            raise TransferError(errmsg)
+
+    def transfer_to(self, filepath, host, newpath,
+                      transfermethod='ftps', username=None,
+                      password=None, port=None, result={},
+                      info={}, req={}):
+
+        """This function handles transfering a file via one of the following
+        protocols: { ftp, ftps, sftp, http, https, scp, copy (nfs) }
+
+        Parameters
+        ----------
+          filepath: str
+              file path on the source host
+          host: str
+              the source hostname
+          newpath: str
+              file path on the destination host
+          transfermethod: str (optional, defaults to 'ftps')
+              one of the protocols listed above
+          port: int (optional)
+              port for the protocol
+          username: str or None (optional)
+              username for ftp/ftps/sftp/http/https/scp transfers
+          password: str or None (optional)
+              password for ftp/ftps/sftp/http/https transfers
+          result: dict (optional)
+              dictionary to store info about transfer
+          info: dict (optional)
+              metadata info collected about the file
+          req: dict
+              the original file transfer request
+        """
+
+        self.logger.info("transfer file (%s): %s --> %s:%s" % (
+            transfermethod, filepath, host, newpath))
+        (directory, filename) = os.path.split(filepath)
+
+        result.update(dict(time_start=datetime.datetime.now(),
+                           src_host=self.myhost, src_path=filepath,
+                           dst_host=host, dst_path=newpath,
+                           xfer_method=transfermethod))
+
+        if not username:
+            username = os.environ.get('LOGNAME', 'anonymous')
+
+        if transfermethod == 'copy':
+            # NFS mount is assumed to be setup.  If we have an alternate
+            # mount location locally, then mangle the path to reflect the
+            # mount on this host
+            if self.mountmangle and filepath.startswith(self.mountmangle):
+                sfx = filepath[len(self.mountmangle):].lstrip('/')
+                copypath = os.path.join(self.mountmangle, sfx)
+            else:
+                copypath = filepath
+
+            cmd = ("cp %s %s" % (copypath, newpath))
+            result.update(dict(src_path=copypath))
+
+        elif transfermethod == 'scp':
+            # passwordless scp is assumed to be setup
+            cmd = ("scp %s %s@%s:%s" % (filepath, username, host, newpath))
+
+        else:
+            # <== Set up to do an lftp transfer (ftp/sftp/ftps/http/https)
+
+            if password is not None:
+                login = '"%s","%s"' % (username, password)
+            else:
+                # password to be looked up in .netrc
+                login = '"%s"' % (username)
+
+            setup = "set xfer:log yes; set net:max-retries 5; set net:reconnect-interval-max 2; set net:reconnect-interval-base 2; set xfer:disk-full-fatal true;"
+
+            # Special args for specific protocols
+            if transfermethod == 'ftp':
+                setup = "%s set ftp:use-feat no; set ftp:use-mdtm no;" % (setup)
+
+            elif transfermethod == 'ftps':
+                setup = "%s set ftp:use-feat no; set ftp:use-mdtm no; set ftp:ssl-force yes;" % (
+                    setup)
+
+            elif transfermethod == 'sftp':
+                setup = "%s set ftp:use-feat no; set ftp:ssl-force yes;" % (
+                    setup)
+
+            elif transfermethod == 'http':
+                pass
+
+            elif transfermethod == 'https':
+                pass
+
+            else:
+                raise TransferError("Request to transfer file '%s': don't understand '%s' as a transfermethod" % (
+                    filename, transfermethod))
+
+            if port:
+                cmd = ("""lftp -e '%s put -O %s %s; exit' -u %s %s://%s:%d""" % (
+                    setup, newpath, filepath, login, transfermethod, host, port))
+            else:
+                cmd = ("""lftp -e '%s put -O %s %s; exit' -u %s %s://%s""" % (
+                    setup, newpath, filepath, login, transfermethod, host))
+
+
+        try:
+            result.update(dict(xfer_cmd=cmd))
+
+            self.logger.info(cmd)
+            start_time = time.time()
+
+            res = os.system(cmd)
+
+            end_time = time.time()
+            self.logger.info("transfer completed, elapsed=%.4f sec" % (
+                end_time - start_time))
+
+            # TODO: Check size, md5sum on remote?
+            info['filesize'] = ?
+            info['md5sum'] = None
 
             result.update(dict(time_done=datetime.datetime.now(),
                                md5sum=md5sum, xfer_code=res))
