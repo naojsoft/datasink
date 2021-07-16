@@ -125,7 +125,8 @@ class Transfer:
 
         # check for file exists already; if so, rename it and allow the
         # transfer to continue
-        self.check_rename(newpath)
+        # NOTE: moved to transfer_from/to
+        #self.check_rename(newpath)
 
         info.update(dict(md5sum=None, filesize=None))
 
@@ -192,6 +193,10 @@ class Transfer:
           req: dict
               the original file transfer request
         """
+
+        # check for file exists already; if so, rename it and allow the
+        # transfer to continue
+        self.check_rename(newpath)
 
         self.logger.info("transfer file (%s): %s <-- %s" % (
             transfermethod, newpath, filepath))
@@ -341,6 +346,10 @@ class Transfer:
           req: dict
               the original file transfer request
         """
+
+        # check for file exists already; if so, rename it and allow the
+        # transfer to continue
+        self.check_rename(newpath)
 
         self.logger.info("transfer file (%s): %s --> %s:%s" % (
             transfermethod, filepath, host, newpath))
