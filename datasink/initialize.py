@@ -2,7 +2,7 @@
 # initialize.py -- initialize the data sink
 #
 # This is open-source software licensed under a BSD license.
-# Please see the file LICENSE.txt for details.
+# Please see the file LICENSE.md for details.
 #
 import sys
 

@@ -64,10 +64,13 @@ def server(options, config):
                 fn_ack(True, '', {})
                 return
 
-        # TODO: where should these be inserted
-        job['host'] = config['transfer_host']
-        job['transfermethod'] = config['transfer_method']
-        job['username'] = config['transfer_username']
+        # get particulars of transfer method
+        if 'host' not in job:
+            job['host'] = config['transfer_host']
+        if 'transfermethod' not in job:
+            job['transfermethod'] = config['transfer_method']
+        if 'username' not in job:
+            job['username'] = config['transfer_username']
         job['direction'] = config.get('transfer_direction', 'from')
 
         xfer.transfer(job, info, res)
