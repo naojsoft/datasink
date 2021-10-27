@@ -12,6 +12,7 @@ $ datasink -f <configfile>
 import sys
 import threading
 import os, signal
+import shutil
 import tarfile
 
 from g2base import ssdlog, myproc
@@ -104,7 +105,7 @@ def server(options, config):
                 else:
                     if movedir is not None:
                         move_path = os.path.join(movedir, filename)
-                        os.rename(res['dst_path'], move_path)
+                        shutil.move(res['dst_path'], move_path)
 
                 logger.info("unpack/move completed")
 
