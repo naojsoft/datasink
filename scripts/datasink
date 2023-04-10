@@ -15,7 +15,7 @@ from argparse import ArgumentParser
 from g2base import ssdlog
 
 from datasink.datasink import main
-
+from datasink import __version__
 
 if __name__ == '__main__':
 
@@ -26,6 +26,9 @@ if __name__ == '__main__':
     argprs.add_argument("--kill", dest="kill", action="store_true",
                         default=False,
                         help="Kill the running datasink")
+    argprs.add_argument('--version', action='version',
+                        version='%(prog)s v{version}'.format(version=__version__),
+                        help="Show the datasink version and exit")
     ssdlog.addlogopts(argprs)
 
     (options, args) = argprs.parse_known_args(sys.argv[1:])
