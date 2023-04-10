@@ -52,8 +52,11 @@ class JobSource:
                        source_origin=self.name)
 
             message = json.dumps(pkt)
+            # look for topic in following order: 1) submit call kwarg,
+            # 2) job dict, 3) job source config, 4) default topic
             if topic is None:
-                topic = job.get('topic', default_topic)
+                topic = job.get('topic',
+                                self.config.get('topic', default_topic))
 
             # set up message properties
             kwargs = dict(content_type='application/json')
