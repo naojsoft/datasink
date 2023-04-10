@@ -1,0 +1,8 @@
+comment: "
+  Datasink configuration for 'pub' (publisher/producer).
+  "
+realm: other
+realm_host: localhost
+realm_username: 'guest'
+realm_password: 'guest'
+message_persist: true

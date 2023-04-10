@@ -31,7 +31,7 @@ class JobSource:
         auth = pika.PlainCredentials(username=self.config['realm_username'],
                                      password=self.config['realm_password'])
         params = pika.ConnectionParameters(host=self.realm_host,
-                                           #port=config['realm_port'],
+                                           port=self.config.get('realm_port', 5672),
                                            # NOTE: necessary to keep RMQ
                                            # from disconnecting us if we
                                            # don't send anything for a while
@@ -43,7 +43,7 @@ class JobSource:
     def shutdown(self):
         self.connection.close()
 
-    def submit(self, job):
+    def submit(self, job, topic=None):
 
         try:
             pkt = dict()
@@ -52,10 +52,11 @@ class JobSource:
                        source_origin=self.name)
 
             message = json.dumps(pkt)
-            topic = job.get('topic', default_topic)
+            if topic is None:
+                topic = job.get('topic', default_topic)
 
             # set up message properties
-            kwargs = {}
+            kwargs = dict(content_type='application/json')
 
             persist = self.config.get('message_persist', False)
             if persist:
@@ -64,7 +65,7 @@ class JobSource:
             msg_ttl_sec = self.config.get('ttl_sec', None)
             if msg_ttl_sec is not None:
                 # message TTL is in msec
-                message_ttl = int(self.message_ttl_sec * 1000)
+                message_ttl = int(msg_ttl_sec * 1000)
                 kwargs['expiration'] = str(message_ttl)
 
             props = pika.BasicProperties(**kwargs)

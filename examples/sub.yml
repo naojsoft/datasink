@@ -1,0 +1,8 @@
+comment: "
+  Datasink configuration for 'sub' (subscriber/consumer).
+  "
+realm: other
+realm_host: localhost
+realm_username: 'guest'
+realm_password: 'guest'
+num_workers: 2

@@ -10,6 +10,7 @@ import time
 import json
 import functools
 import queue
+import pprint
 import threading
 
 from g2base import ssdlog
@@ -31,6 +32,7 @@ class JobSink:
         self.action_tbl = {'ping': self.ping,
                            'window': self.window,
                            'sleep': self.sleep,
+                           'debug': self.debug,
                            }
         self.retry_interval = 60.0
 
@@ -103,6 +105,13 @@ class JobSink:
 
         self.logger.info("ending worker loop...")
 
+    def debug(self, work_unit, fn_ack):
+        """debug job."""
+        job = work_unit['job']
+        print("Received job:")
+        pprint.pprint(job)
+        fn_ack(True, '', {})
+
     def ping(self, work_unit, fn_ack):
         """ping job."""
         fn_ack(True, 'pong', {})
@@ -142,13 +151,13 @@ class JobSink:
             self.threads.append(t)
             t.start()
 
-    def serve(self, ev_quit=None):
+    def serve(self, ev_quit=None, topic=None):
         config = self.config
         # connect to queues
         auth = pika.PlainCredentials(username=config['realm_username'],
                                      password=config['realm_password'])
         params = pika.ConnectionParameters(host=config['realm_host'],
-                                           #port=config['realm_port'],
+                                           port=config.get('realm_port', 5672),
                                            credentials=auth)
 
         # start up consumer workers
@@ -162,11 +171,14 @@ class JobSink:
 
                 channel.basic_qos(prefetch_count=config['num_workers'])
 
+                if topic is None:
+                    topic = config.get('topic', default_topic)
+
                 queue_names = config.get('queue_names', [self.name])
                 for queue_name in queue_names:
                     channel.queue_bind(queue=queue_name,
                                        exchange=config['realm'],
-                                       routing_key=config.get('topic', default_topic))
+                                       routing_key=topic)
 
                 callback_fn = functools.partial(self.handle_message,
                                                 args=[channel, connection,

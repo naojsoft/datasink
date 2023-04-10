@@ -1,0 +1,6 @@
+{"action": "debug",
+ "srcpath": "/data/somedata/someinst/INSA00000001.fits",
+ "dstpath": "./INS/INSA00000001.fits",
+ "priority": 1,
+ "filesize": 7777,
+ "file_ext": ".fits"}

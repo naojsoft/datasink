@@ -1,0 +1,30 @@
+comment: "
+  Datasink configuration for 'hub'.
+  "
+realm: other
+realm_host: localhost
+realm_username: 'guest'
+realm_password: 'guest'
+# where undeliverable messages are finally delivered
+backlog_queue: 'backlog'
+# default priority for items entering the hub
+default_priority: 1
+# should the hub persist on disk
+persist: false
+# declare queues
+queues:
+    ins1:
+        # true to enable queue
+        enabled: true
+        # true to make queue persist on disk
+        persist: false
+        # true to make queue delete after last subscriber exits
+        transient: false
+    ins2:
+        enabled: true
+        persist: false
+        transient: false
+    data:
+        enabled: true
+        persist: false
+        transient: false
