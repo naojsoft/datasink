@@ -208,7 +208,8 @@ class JobSink:
                 ev_quit.wait(self.retry_interval)
                 continue
 
-            except pika.exceptions.AMQPConnectionError as e:
+            except (pika.exceptions.AMQPConnectionError,
+                    pika.exceptions.AMQPHeartbeatTimeout) as e:
                 self.logger.error("connection error: {}".format(e), exc_info=True)
                 self.logger.info("retrying after {} sec interval".format(self.retry_interval))
                 ev_quit.wait(self.retry_interval)
