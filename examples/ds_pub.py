@@ -15,13 +15,12 @@ import json
 from argparse import ArgumentParser
 
 from datasink.client import JobSource, default_topic
-
-from g2base import ssdlog
+from datasink import log
 
 
 def main(options, args):
 
-    logger = ssdlog.make_logger(options.name, options)
+    logger = log.make_logger(options.name, options)
 
     # create JobSource
     datasrc = JobSource(logger, options.name)
@@ -65,7 +64,7 @@ if __name__ == '__main__':
     argprs.add_argument("-n", "--name", dest="name", default='anonymous',
                         metavar="NAME",
                         help="Specify the NAME for this datasource")
-    ssdlog.addlogopts(argprs)
+    log.addlogopts(argprs)
 
     (options, args) = argprs.parse_known_args(sys.argv[1:])
 

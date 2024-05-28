@@ -10,17 +10,22 @@ where <configfile> is the path to a file containing the configuration
 for this datasink.
 """
 import sys
+import os, signal
+import tempfile
 from argparse import ArgumentParser
 
-from g2base import ssdlog
-
-from datasink.datasink import main
+from datasink import log
+from datasink.datasink import server
+from datasink.initialize import read_config
 from datasink import __version__
 
 if __name__ == '__main__':
 
-    argprs = ArgumentParser("Gen2 datasink")
+    argprs = ArgumentParser(description="datasink file transfer program")
 
+    argprs.add_argument("--detach", dest="detach", action="store_true",
+                        default=False,
+                        help="Detach this process")
     argprs.add_argument("-f", "--config", dest="conffile",
                         help="Specify the configuration file for this sink")
     argprs.add_argument("--kill", dest="kill", action="store_true",
@@ -29,11 +34,46 @@ if __name__ == '__main__':
     argprs.add_argument('--version', action='version',
                         version='%(prog)s v{version}'.format(version=__version__),
                         help="Show the datasink version and exit")
-    ssdlog.addlogopts(argprs)
+    log.addlogopts(argprs)
 
     (options, args) = argprs.parse_known_args(sys.argv[1:])
 
     if options.conffile is None:
-        argprs.error("You need to specify a config file with -f")
+        argprs.error("Please specify a config file with -f")
 
-    main(options, args)
+    config = read_config(options.conffile)
+
+    if options.detach or config.get('detach', False):
+        cmd_args = sys.argv.copy()
+        cmd_args.remove("--detach")
+        p = subprocess.Popen(cmd_args, start_new_session=True,
+                             stdin=None, stdout=None, stderr=None,
+                             close_fds=True, shell=False)
+        # TODO: check p
+        sys.exit(0)
+
+    pidfile = config.get('pidfile', os.path.join(tempfile.gettempdir(),
+                                                 "datasink.pid"))
+
+    if options.kill:
+        try:
+            try:
+                with open(pidfile, 'r') as pid_f:
+                    pid = int(pid_f.read().strip())
+
+                print("Killing %d..." % (pid))
+                os.kill(pid, signal.SIGKILL)
+                print("Killed.")
+
+            except IOError as e:
+                print(f"Cannot read pid file ({pidfile}): {e}")
+                sys.exit(1)
+
+            except OSError as e:
+                print(f"Error killing pid ({pid}): {e}")
+                sys.exit(1)
+
+        finally:
+            sys.exit(0)
+
+    server(options, config)

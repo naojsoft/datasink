@@ -13,8 +13,6 @@ import queue
 import pprint
 import threading
 
-from g2base import ssdlog
-
 import pika
 
 from datasink.initialize import read_config, default_topic
@@ -34,7 +32,7 @@ class JobSink:
                            'sleep': self.sleep,
                            'debug': self.debug,
                            }
-        self.retry_interval = 60.0
+        self.recover_interval = 60.0
 
     def add_action(self, aname, method):
         self.action_tbl[aname] = method
@@ -142,7 +140,7 @@ class JobSink:
     def read_config(self, configfile):
         self.config = read_config(configfile)
 
-        self.retry_interval = self.config.get('retry_interval', 60.0)
+        self.recover_interval = self.config.get('retry_interval', 60.0)
 
     def start_workers(self, ev_quit=None):
         numworkers = self.config['num_workers']
@@ -198,21 +196,21 @@ class JobSink:
 
             except pika.exceptions.ConnectionClosedByBroker as e:
                 self.logger.error("broker closed connection: {}".format(e))
-                self.logger.info("retrying after {} sec interval".format(self.retry_interval))
-                ev_quit.wait(self.retry_interval)
+                self.logger.info("retrying after {} sec interval".format(self.recover_interval))
+                ev_quit.wait(self.recover_interval)
                 continue
 
             except pika.exceptions.AMQPChannelError as e:
                 self.logger.error("channel error: {}".format(e), exc_info=True)
-                self.logger.info("retrying after {} sec interval".format(self.retry_interval))
-                ev_quit.wait(self.retry_interval)
+                self.logger.info("retrying after {} sec interval".format(self.recover_interval))
+                ev_quit.wait(self.recover_interval)
                 continue
 
             except (pika.exceptions.AMQPConnectionError,
                     pika.exceptions.AMQPHeartbeatTimeout) as e:
                 self.logger.error("connection error: {}".format(e), exc_info=True)
-                self.logger.info("retrying after {} sec interval".format(self.retry_interval))
-                ev_quit.wait(self.retry_interval)
+                self.logger.info("retrying after {} sec interval".format(self.recover_interval))
+                ev_quit.wait(self.recover_interval)
                 continue
 
         self.logger.info("Shutting down...")

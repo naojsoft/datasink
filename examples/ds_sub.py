@@ -18,8 +18,7 @@ from argparse import ArgumentParser
 
 from datasink.initialize import default_topic
 from datasink.worker import JobSink
-
-from g2base import ssdlog
+from datasink import log
 
 
 def main(options, args):
@@ -28,7 +27,7 @@ def main(options, args):
     if name is None:
         name = "worker-{}".format(os.getpid())
 
-    logger = ssdlog.make_logger(name, options)
+    logger = log.make_logger(name, options)
 
     jobsink = JobSink(logger, name)
     jobsink.read_config(options.configfile)
@@ -51,7 +50,7 @@ if __name__ == '__main__':
     argprs.add_argument("-t", "--topic", dest="topic", default=default_topic,
                         metavar="TOPIC",
                         help="Dot separated topic")
-    ssdlog.addlogopts(argprs)
+    log.addlogopts(argprs)
 
     (options, args) = argprs.parse_known_args(sys.argv[1:])
 

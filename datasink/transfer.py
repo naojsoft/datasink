@@ -76,14 +76,12 @@ class Transfer:
             # missing
             #raise md5Error("%s: upstream md5 checksum missing!" % (
             #    filepath))
-            self.logger.warning("%s: missing checksum. upstream md5 checksum turned off?!" % (
-                    filepath))
+            self.logger.warning(f"{filepath}: missing checksum. upstream md5 checksum turned off?!")
             return calc_md5sum
 
         # Check MD5
         if calc_md5sum != md5sum:
-            errmsg = "%s: md5 checksums don't match recv='%s' sent='%s'" % (
-                filepath, calc_md5sum, md5sum)
+            errmsg = f"{filepath}: md5 checksums don't match recv='{calc_md5sum}' sent='{md5sum}'"
             raise md5Error(errmsg)
 
         return md5sum
@@ -99,14 +97,14 @@ class Transfer:
 
         elif self.storeby == 'propid':
             propid = req.get('propid', None)
-            if propid is None:
-                raise TransferError("Storing by PROP-ID and propid is 'None': {}".format(req))
+            if propid is None or propid.strip() == '#':
+                raise TransferError(f"Storing by PROP-ID and propid is '{propid}'")
             newpath = abspath(os.path.join(self.datadir, propid, filename))
 
         elif self.storeby == 'insname':
             insname = req.get('insname', None)
             if insname is None:
-                raise TransferError("Storing by instrument and insname is 'None': {}".format(req))
+                raise TransferError(f"Storing by instrument and insname is '{insname}'")
             newpath = abspath(os.path.join(self.datadir, insname, filename))
         else:
             raise TransferError("I don't know how to store by '%s'" % (
@@ -120,7 +118,7 @@ class Transfer:
         direction = req.get('direction', 'from')
 
         (dirpath, filename) = os.path.split(filepath)
-        self.logger.debug("Preparing to transfer %s..." % (filename))
+        self.logger.debug(f"Preparing to transfer '{filename}'")
         newpath = self.get_newpath(filename, req, direction=direction)
 
         # check for file exists already; if so, rename it and allow the

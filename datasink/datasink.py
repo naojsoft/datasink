@@ -1,5 +1,5 @@
 #
-# datasink.py -- a program to receive data from Gen2
+# datasink.py -- a program to transfer jobs
 #
 """
 A program to receive data from the Subaru Telescope Gen2 system.
@@ -11,18 +11,16 @@ $ datasink -f <configfile>
 """
 import sys
 import threading
-import os, signal
+import os
 import shutil
 import tarfile
 
-from g2base import ssdlog, myproc
-
-from . import worker, initialize, transfer
+from . import worker, transfer, log
 
 
 def server(options, config):
     # Create top level logger.
-    logger = ssdlog.make_logger('datasink', options)
+    logger = log.make_logger('datasink', options)
 
     key = config.get('key', None)
     if key is None:
@@ -32,10 +30,10 @@ def server(options, config):
     datadir = config.get('datadir', None)
     if datadir is None:
         datadir = os.getcwd()
-        logger.warning("Storing files in {}".format(datadir))
+        logger.warning(f"Storing files in {datadir}")
         logger.info("To change this, add 'datadir' directive to config")
     else:
-        logger.info("Storing files in {}".format(datadir))
+        logger.info(f"Storing files in {datadir}")
 
     # if this is set, file will be moved here after transfer
     movedir = config.get('movedir', None)
@@ -124,59 +122,3 @@ def server(options, config):
 
     logger.info("Exiting program.")
     sys.exit(0)
-
-
-def main(options, args):
-
-    if options.conffile is None:
-        raise RuntimeError("Please specify a configuration file with -f")
-
-    config = initialize.read_config(options.conffile)
-
-    pidfile = config.get('pidfile', "/tmp/datasink.pid")
-
-    if options.kill:
-        try:
-            try:
-                with open(pidfile, 'r') as pid_f:
-                    pid = int(pid_f.read().strip())
-
-                print("Killing %d..." % (pid))
-                os.kill(pid, signal.SIGKILL)
-                print("Killed.")
-
-            except IOError as e:
-                print("Cannot read pid file (%s): %s" % (
-                    pidfile, str(e)))
-                sys.exit(1)
-
-            except OSError as e:
-                print("Error killing pid (%d): %s" % (
-                    pid, str(e)))
-                sys.exit(1)
-
-        finally:
-            sys.exit(0)
-
-    detach = config.get('detach', False)
-    if detach:
-        print("Detaching from this process...")
-        sys.stdout.flush()
-        try:
-            try:
-                output = '/dev/null'
-                child = myproc.myproc(server, args=[options, config],
-                                      pidfile=pidfile, detach=True,
-                                      stdout=output,
-                                      stderr=output)
-                child.wait()
-
-            except Exception as e:
-                print("Error detaching process: %s" % (str(e)))
-
-            # TODO: check status of process and report error if necessary
-        finally:
-            sys.exit(0)
-
-    # non-detach operation
-    server(options, config)
