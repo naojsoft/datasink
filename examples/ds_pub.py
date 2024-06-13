@@ -1,14 +1,30 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 """
-Submit a job to the datasink
+Submit a job as a job source.
+
+See tutorial document.
 
 Usage:
-  $ ds_client -f <realm_config>.yml -k <topic,...> -j <job file>
+  $ ds_pub.py -n NAME -f PUB_CFG -t TOPIC -j JOB_FILE --loglevel=20 --stderr
 
 or, to read the job from stdin:
 
-  $ cat <job file> | ds_client -f <realm_config>.yml -k <topic,...>
+  $ cat JOB_FILE | ds_pub.py -n NAME -f PUB_CFG -t TOPIC --loglevel=20 --stderr
 
+Where:
+  - NAME is the name of the publisher (not so important, but good for
+    debugging or the job sink knowing who sent this)
+
+  - PUB_CFG is the job source configuration YAML file
+
+  - TOPIC is a dotted topic (e.g. "foo", "foo.bar", "foo.bar.baz", etc)
+
+  - JOB_FILE is a JSON-formatted job file
+
+Example:
+  $ ds_pub.py -n Publisher1 -f pub.yml -t foo -j job.json --loglevel=20 --stderr
+
+Repeat as needed with different job files, topics.
 """
 import sys
 import json
@@ -23,11 +39,11 @@ def main(options, args):
     logger = log.make_logger(options.name, options)
 
     # create JobSource
-    datasrc = JobSource(logger, options.name)
+    jobsrc = JobSource(logger, options.name)
 
     # Configure and connect
-    datasrc.read_config(options.configfile)
-    datasrc.connect()
+    jobsrc.read_config(options.configfile)
+    jobsrc.connect()
 
     # Read JSON-formatted job file
     if options.jobfile is not None:
@@ -42,9 +58,9 @@ def main(options, args):
         job_d = json.loads(buf)
 
     # Submit this job to the exchange
-    datasrc.submit(job_d, topic=options.topic)
+    jobsrc.submit(job_d, topic=options.topic)
 
-    datasrc.shutdown()
+    jobsrc.shutdown()
 
 
 if __name__ == '__main__':

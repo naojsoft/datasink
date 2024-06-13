@@ -1,14 +1,25 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-   Usage:
-     $ ds_worker -f <sinkconfig>.yml [log options] queuename ...
+Read and process a job from a job sink.
 
-realm: other
-realm_host: localhost
-realm_username: 'guest'
-realm_password: 'guest'
-num_workers: 2
+See tutorial document.
 
+Usage:
+  $ ds_sub.py -n NAME -f SUB_CFG --loglevel=20 --stderr
+
+Where:
+  - NAME is the name of the job sink (this should be the same as a name of
+    a queue defined in the HUB_CFG--see hub.yml)
+
+  - SUB_CFG is the job sink/worker configuration YAML file
+
+  - TOPIC is a dotted topic (e.g. "foo", "foo.bar", "foo.bar.baz") which can
+    include wild cards (specified as #) for any component(s).
+
+Example:
+  $ /ds_sub.py -f sub.yml -n ins1 --loglevel=20 --stderr --topic=foo
+
+It will run and consume on the ins1 queue until you interrupt it.
 """
 
 import sys
@@ -21,6 +32,30 @@ from datasink.worker import JobSink
 from datasink import log
 
 
+def job_doit(work_unit, fn_ack):
+    """Simple job processor for 'doit' action.
+    We just print the job
+    """
+    job = work_unit['job']
+
+    try:
+        action = job.get('action', None)
+        # this is not actually necessary, since we shouldn't even be
+        # called unless the action keyword was 'doit'
+        assert action == 'doit'
+
+        # do some kind of work on this job
+        print("-------------------")
+        print("got a job from {source_origin} at time {time_origin}".format(**job))
+
+        # ACK: release this from the queue
+        fn_ack(True, "success", {})
+
+    except Exception as e:
+        errmsg = f"error handling job '{action}': {e}"
+        # NACK this
+        fn_ack(False, errmsg, {})
+
 def main(options, args):
     name = options.name
     # this processor's name
@@ -31,6 +66,9 @@ def main(options, args):
 
     jobsink = JobSink(logger, name)
     jobsink.read_config(options.configfile)
+
+    # register a callback to handle 'doit' jobs
+    jobsink.add_action('doit', job_doit)
 
     ev_quit = threading.Event()
 

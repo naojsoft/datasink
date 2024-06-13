@@ -1,5 +1,5 @@
 comment: "
-  Datasink configuration for 'hub'.
+  Datasink configuration for realm 'other', manged by ds_hub.py
   "
 realm: other
 realm_host: localhost
@@ -20,11 +20,10 @@ queues:
         persist: false
         # true to make queue delete after last subscriber exits
         transient: false
+        # topic to control routing
+        topic: foo
     ins2:
         enabled: true
         persist: false
         transient: false
-    data:
-        enabled: true
-        persist: false
-        transient: false
+        topic: bar

@@ -35,11 +35,19 @@ def setup_queue(channel, queue_name, dct, config, bind=True):
     channel.queue_declare(queue=queue_name, durable=durable,
                           auto_delete=auto_delete, arguments=args)
 
+    topic = dct.get('topic', default_topic)
+    # NOTE: queue should be disabled before changing routing key (topic)
+    # and then re-enabling
     if bind:
         channel.queue_bind(queue=queue_name,
                            exchange=config['realm'],
                            # NOTE: acts as a selector for messages to this queue
-                           routing_key=dct.get('topic', default_topic))
+                           routing_key=topic)
+    else:
+        channel.queue_unbind(queue=queue_name,
+                             exchange=config['realm'],
+                             routing_key=topic)
+
 
 def unlink_queue(channel, queue_name, dct, config):
     """Disassociates this queue from the exchange, so that it won't receive
