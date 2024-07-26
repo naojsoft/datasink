@@ -12,12 +12,48 @@ for this datasink.
 import sys
 import os, signal
 import tempfile
+import subprocess
 from argparse import ArgumentParser
 
 from datasink import log
 from datasink.datasink import server
 from datasink.initialize import read_config
 from datasink import __version__
+
+def run_in_background(command):
+    """
+    Run a command in the background, detaching it from the terminal.
+
+    :param command: List of command arguments to run in the background.
+    """
+    # Fork the first time
+    pid = os.fork()
+    if pid > 0:
+        # Parent process, return and allow the parent to exit
+        return
+
+    # Child process
+    # Detach from parent environment
+    os.setsid()
+
+    # Fork the second time
+    pid = os.fork()
+    if pid > 0:
+        # First child exits
+        os._exit(0)
+
+    # Second child process
+    # Redirect standard file descriptors
+    sys.stdout.flush()
+    sys.stderr.flush()
+    with open('/dev/null', 'wb', 0) as f_null:
+        os.dup2(f_null.fileno(), 0)  # Redirect stdin
+        os.dup2(f_null.fileno(), 1)  # Redirect stdout
+        os.dup2(f_null.fileno(), 2)  # Redirect stderr
+
+    # Execute the command
+    subprocess.Popen(command)
+
 
 if __name__ == '__main__':
 
@@ -43,13 +79,11 @@ if __name__ == '__main__':
 
     config = read_config(options.conffile)
 
-    if options.detach or config.get('detach', False):
+    if options.detach:
         cmd_args = sys.argv.copy()
-        cmd_args.remove("--detach")
-        p = subprocess.Popen(cmd_args, start_new_session=True,
-                             stdin=None, stdout=None, stderr=None,
-                             close_fds=True, shell=False)
-        # TODO: check p
+        if '--detach' in cmd_args:
+            cmd_args.remove("--detach")
+            run_in_background(cmd_args)
         sys.exit(0)
 
     pidfile = config.get('pidfile', os.path.join(tempfile.gettempdir(),
