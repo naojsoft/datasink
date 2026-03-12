@@ -163,6 +163,8 @@ class JobSink:
             ev_quit = threading.Event()
 
         while not ev_quit.is_set():
+            # dereference former objects if reconnecting
+            connection, channel = None, None
             try:
                 connection = pika.BlockingConnection(params)
                 channel = connection.channel()
@@ -186,32 +188,35 @@ class JobSink:
 
                 self.logger.info("consuming on queues: %s" % (', '.join(queue_names)))
                 self.logger.info("Waiting for messages. To exit press CTRL+C")
-                try:
-                    channel.start_consuming()
+                channel.start_consuming()
 
-                except KeyboardInterrupt:
-                    self.logger.info("detected keyboard interrupt!")
-                    channel.stop_consuming()
-                    break
+            except KeyboardInterrupt:
+                self.logger.info("detected keyboard interrupt!")
+                channel.stop_consuming()
+                break
 
             except pika.exceptions.ConnectionClosedByBroker as e:
-                self.logger.error("broker closed connection: {}".format(e))
-                self.logger.info("retrying after {} sec interval".format(self.recover_interval))
+                self.logger.error(f"broker closed connection: {e}")
+                self.logger.info(f"retrying after {self.recover_interval} sec interval")
                 ev_quit.wait(self.recover_interval)
                 continue
 
             except pika.exceptions.AMQPChannelError as e:
-                self.logger.error("channel error: {}".format(e), exc_info=True)
-                self.logger.info("retrying after {} sec interval".format(self.recover_interval))
+                self.logger.error(f"channel error: {e}", exc_info=True)
+                self.logger.info(f"retrying after {self.recover_interval} sec interval")
                 ev_quit.wait(self.recover_interval)
                 continue
 
             except (pika.exceptions.AMQPConnectionError,
                     pika.exceptions.AMQPHeartbeatTimeout) as e:
-                self.logger.error("connection error: {}".format(e), exc_info=True)
-                self.logger.info("retrying after {} sec interval".format(self.recover_interval))
+                self.logger.error(f"connection error: {e}", exc_info=True)
+                self.logger.info(f"retrying after {self.recover_interval} sec interval")
                 ev_quit.wait(self.recover_interval)
                 continue
+
+            except Exception as e:
+                self.logger.error(f"unhandled connection error: {e}",
+                                  exc_info=True)
 
         self.logger.info("Shutting down...")
         ev_quit.set()
