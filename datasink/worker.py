@@ -162,9 +162,24 @@ class JobSink:
         if ev_quit is None:
             ev_quit = threading.Event()
 
+        connection, channel = None, None
+
         while not ev_quit.is_set():
-            # dereference former objects if reconnecting
-            connection, channel = None, None
+            # closures to avoid too many open files failures
+            if channel is not None:
+                try:
+                    channel.close()
+                except Exception:
+                    pass
+            channel = None
+
+            if connection is not None and connection.is_open:
+                try:
+                    connection.close()
+                except Exception:
+                    pass
+            connection = None
+
             try:
                 connection = pika.BlockingConnection(params)
                 channel = connection.channel()

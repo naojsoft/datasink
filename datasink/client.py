@@ -24,6 +24,8 @@ class JobSource:
         self.name = name
         self.ev_quit = threading.Event()
 
+        self.connection = None
+        self.channel = None
         self.recover_interval = 60.0
 
     def read_config(self, configfile):
@@ -33,6 +35,21 @@ class JobSource:
         self.realm_host = self.config['realm_host']
 
     def connect(self):
+        # closures to avoid too many open files failures
+        if self.channel is not None:
+            try:
+                self.channel.close()
+            except Exception:
+                pass
+        self.channel = None
+
+        if self.connection is not None and self.connection.is_open:
+            try:
+                self.connection.close()
+            except Exception:
+                pass
+        self.connection = None
+
         auth = pika.PlainCredentials(username=self.config['realm_username'],
                                      password=self.config['realm_password'])
         params = pika.ConnectionParameters(host=self.realm_host,
